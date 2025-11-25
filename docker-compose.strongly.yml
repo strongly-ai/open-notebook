@@ -1,0 +1,68 @@
+version: '3.8'
+
+# Docker Compose for Strongly.AI Marketplace Deployment
+#
+# This configuration runs Open Notebook with Strongly.AI integration:
+# - Header-based authentication from platform proxy
+# - AI Gateway integration via STRONGLY_SERVICES
+# - SurrealDB for data storage
+#
+# Usage:
+#   docker-compose -f docker-compose.strongly.yml up --build
+
+services:
+  open-notebook:
+    build:
+      context: .
+      dockerfile: Dockerfile.single
+    container_name: strongly-open-notebook
+    environment:
+      # Strongly.AI Integration
+      - STRONGLY_MODE=true
+      - STRONGLY_SERVICES=${STRONGLY_SERVICES}
+
+      # SurrealDB Configuration (can be from STRONGLY_SERVICES)
+      - SURREAL_URL=${SURREAL_URL:-ws://surrealdb:8000/rpc}
+      - SURREAL_USER=${SURREAL_USER:-root}
+      - SURREAL_PASSWORD=${SURREAL_PASSWORD:-root}
+      - SURREAL_NAMESPACE=${SURREAL_NAMESPACE:-open_notebook}
+      - SURREAL_DATABASE=${SURREAL_DATABASE:-open_notebook}
+
+      # API Configuration
+      - API_CLIENT_TIMEOUT=300
+      - ESPERANTO_LLM_TIMEOUT=120
+
+      # OpenAI-compatible endpoint will be set from STRONGLY_SERVICES
+      # No individual API keys needed - all LLM access through AI Gateway
+
+    ports:
+      - "8088:8088"
+    depends_on:
+      - surrealdb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5055/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  surrealdb:
+    image: surrealdb/surrealdb:v2
+    container_name: strongly-surrealdb
+    command: start --user root --pass root
+    volumes:
+      - surrealdb-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  surrealdb-data:
+
+# Network for Strongly.AI platform integration
+networks:
+  default:
+    name: strongly-network

@@ -1,10 +1,12 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from api.auth import PasswordAuthMiddleware
+from api.auth import StronglyAuthMiddleware
+from api.strongly import configure_environment, get_strongly_services
 from api.routers import (
     auth,
     chat,
@@ -23,6 +25,7 @@ from api.routers import (
     source_chat,
     sources,
     speaker_profiles,
+    strongly,
     transformations,
 )
 from api.routers import commands as commands_router
@@ -40,10 +43,21 @@ except Exception as e:
 async def lifespan(app: FastAPI):
     """
     Lifespan event handler for the FastAPI application.
-    Runs database migrations automatically on startup.
+    Runs database migrations and configures Strongly.AI integration on startup.
     """
-    # Startup: Run database migrations
+    # Startup: Configure Strongly.AI integration
     logger.info("Starting API initialization...")
+
+    # Configure Strongly.AI services (AI Gateway, etc.)
+    strongly_mode = os.environ.get("STRONGLY_MODE", "false").lower() == "true"
+    if strongly_mode:
+        logger.info("Running in Strongly.AI mode")
+        configure_environment()
+        services = get_strongly_services()
+        if services.is_configured:
+            logger.success("Strongly.AI services configured successfully")
+        else:
+            logger.warning("Strongly.AI services not fully configured")
 
     try:
         migration_manager = AsyncMigrationManager()
@@ -79,9 +93,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Add password authentication middleware first
-# Exclude /api/auth/status and /api/config from authentication
-app.add_middleware(PasswordAuthMiddleware, excluded_paths=["/", "/health", "/docs", "/openapi.json", "/redoc", "/api/auth/status", "/api/config"])
+# Add authentication middleware
+# Supports both Strongly.AI header-based auth and password-based auth
+app.add_middleware(StronglyAuthMiddleware, excluded_paths=["/", "/health", "/docs", "/openapi.json", "/redoc", "/api/auth/status", "/api/config"])
 
 # Add CORS middleware last (so it processes first)
 app.add_middleware(
@@ -112,6 +126,7 @@ app.include_router(episode_profiles.router, prefix="/api", tags=["episode-profil
 app.include_router(speaker_profiles.router, prefix="/api", tags=["speaker-profiles"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(source_chat.router, prefix="/api", tags=["source-chat"])
+app.include_router(strongly.router, prefix="/api", tags=["strongly"])
 
 
 @app.get("/")

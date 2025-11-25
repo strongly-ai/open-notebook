@@ -1,0 +1,90 @@
+# Strongly.AI Marketplace Manifest for Open Notebook
+# This file defines how Open Notebook is deployed on the Strongly.AI platform
+
+name: open-notebook
+displayName: Open Notebook
+description: AI-powered research assistant for processing documents and notes
+version: 1.2.1
+type: fullstack
+
+# Application configuration
+app:
+  # Frontend (Next.js)
+  frontend:
+    port: 3000
+    buildCommand: cd frontend && npm install && npm run build
+    startCommand: cd frontend && npm start
+    env:
+      - name: API_URL
+        value: "/api"
+      - name: INTERNAL_API_URL
+        value: "http://localhost:5055"
+
+  # Backend (FastAPI)
+  backend:
+    port: 5055
+    runtime: python
+    pythonVersion: "3.11"
+    startCommand: python run_api.py
+    env:
+      - name: STRONGLY_MODE
+        value: "true"
+      - name: SURREAL_URL
+        fromService: surrealdb
+      - name: SURREAL_USER
+        value: "root"
+      - name: SURREAL_PASSWORD
+        secret: true
+      - name: SURREAL_NAMESPACE
+        value: "open_notebook"
+      - name: SURREAL_DATABASE
+        value: "open_notebook"
+
+# Exposed port (through Strongly proxy)
+port: 8088
+
+# Health check configuration
+healthCheck:
+  path: /health
+  port: 5055
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+# Resource requirements
+resources:
+  requests:
+    cpu: "500m"
+    memory: "512Mi"
+  limits:
+    cpu: "2000m"
+    memory: "2Gi"
+
+# Required services
+services:
+  - name: ai_gateway
+    required: true
+    description: LLM access through Strongly AI Gateway
+
+# Database requirements
+databases:
+  - type: surrealdb
+    name: open_notebook
+    description: Document and note storage
+
+# Proxy configuration
+proxy:
+  timeout: 300
+  websocket: true
+
+# Authentication
+auth:
+  type: header
+  headers:
+    - X-Auth-User-Id
+    - X-Auth-User-Email
+    - X-Auth-User-Name
+    - X-Auth-App-Role
+    - X-Auth-Platform-Role
+    - X-Auth-Authenticated
